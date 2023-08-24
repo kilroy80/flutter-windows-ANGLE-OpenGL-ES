@@ -63,14 +63,23 @@ FlutterWindowsANGLEOpenGLESPlugin::~FlutterWindowsANGLEOpenGLESPlugin() {}
 void FlutterWindowsANGLEOpenGLESPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue>& method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  if (method_call.method_name().compare("render") == 0) {
-    constexpr auto w = 1920;
-    constexpr auto h = 1080;
+
+  const flutter::EncodableMap *argsList = std::get_if<flutter::EncodableMap>(call.arguments());
+
+  texture_ = std::make_unique<FlutterDesktopGpuSurfaceDescriptor>();
+
+  if (method_call.method_name().compare("create") == 0) {
+
+    auto w = (argsList->find(flutter::EncodableValue("width")));
+    auto h = (argsList->find(flutter::EncodableValue("height")));
+
+//    constexpr auto w = 1920;
+//    constexpr auto h = 1080;
     // ---------------------------------------------
     surface_manager_ = std::make_unique<ANGLESurfaceManager>(w, h);
     // ---------------------------------------------
     texture_ = std::make_unique<FlutterDesktopGpuSurfaceDescriptor>();
-    texture_->struct_size = sizeof(FlutterDesktopGpuSurfaceDescriptor);
+//    texture_->struct_size = sizeof(FlutterDesktopGpuSurfaceDescriptor);
     texture_->handle = surface_manager_->handle();
     texture_->width = texture_->visible_width = w;
     texture_->height = texture_->visible_height = h;
@@ -78,6 +87,12 @@ void FlutterWindowsANGLEOpenGLESPlugin::HandleMethodCall(
     texture_->release_callback = [](void* release_context) {};
     texture_->format = kFlutterDesktopPixelFormatBGRA8888;
     // ---------------------------------------------
+    auto id = texture_registrar_->RegisterTexture(texture_variant_.get());
+    texture_registrar_->MarkTextureFrameAvailable(id);
+    result->Success(flutter::EncodableValue(id));
+
+  } else if (method_call.method_name().compare("render") == 0) {
+
     texture_variant_ =
         std::make_unique<flutter::TextureVariant>(flutter::GpuSurfaceTexture(
             kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle,
@@ -109,9 +124,9 @@ void FlutterWindowsANGLEOpenGLESPlugin::HandleMethodCall(
     });
     surface_manager_->Read();
     // ---------------------------------------------
-    auto id = texture_registrar_->RegisterTexture(texture_variant_.get());
-    texture_registrar_->MarkTextureFrameAvailable(id);
-    result->Success(flutter::EncodableValue(id));
+//    auto id = texture_registrar_->RegisterTexture(texture_variant_.get());
+//    texture_registrar_->MarkTextureFrameAvailable(id);
+//    result->Success(flutter::EncodableValue(id));
   } else {
     result->NotImplemented();
   }
