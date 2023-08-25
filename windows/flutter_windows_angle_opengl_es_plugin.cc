@@ -60,15 +60,17 @@ FlutterWindowsANGLEOpenGLESPlugin::FlutterWindowsANGLEOpenGLESPlugin(
 
 FlutterWindowsANGLEOpenGLESPlugin::~FlutterWindowsANGLEOpenGLESPlugin() {}
 
-constexpr char kVertexShader[] = R"(attribute vec4 vPosition;
+constexpr char kVertexShader[] = R"(
+    attribute vec4 vPosition;
     attribute vec2 vTexCoord;
     varying vec2 texCoord;
     void main()
     {
         texCoord = vTexCoord;
-        gl_Position = vec4 ( vPosition.x, vPosition.y, 0.0, 1.0 );
+        gl_Position = vPosition;
     })";
-constexpr char kFragmentShader[] = R"(precision mediump float;
+constexpr char kFragmentShader[] = R"(
+    precision mediump float;
     uniform sampler2D sTexture;
     varying vec2 texCoord;
     void main()
@@ -82,20 +84,18 @@ void FlutterWindowsANGLEOpenGLESPlugin::HandleMethodCall(
 
   const flutter::EncodableMap *argsList = std::get_if<flutter::EncodableMap>(method_call.arguments());
 
-  texture_ = std::make_unique<FlutterDesktopGpuSurfaceDescriptor>();
-
   GLuint program;
 
-  int w = 0;
-  int h = 0;
+  auto w = 1280;
+  auto h = 720;
 
   if (method_call.method_name().compare("create") == 0) {
 
     auto w_it = (argsList->find(flutter::EncodableValue("width")))->second;
     auto h_it = (argsList->find(flutter::EncodableValue("height")))->second;
 
-    w = static_cast<int>(std::get<int>((w_it)));
-    h = static_cast<int>(std::get<int>((h_it)));
+    w = static_cast<int32_t>(std::get<int32_t>((w_it)));
+    h = static_cast<int32_t>(std::get<int32_t>((h_it)));
 
 //    constexpr auto w = 1920;
 //    constexpr auto h = 1080;
@@ -116,12 +116,10 @@ void FlutterWindowsANGLEOpenGLESPlugin::HandleMethodCall(
             kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle,
             [&](auto, auto) { return texture_.get(); }));
     // ---------------------------------------------
-    program = CompileProgram(kVertexShader, kFragmentShader);
-//    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glViewport(0, 0, w, h);
+//    program = CompileProgram(kVertexShader, kFragmentShader);
     // ---------------------------------------------
     auto id = texture_registrar_->RegisterTexture(texture_variant_.get());
-    texture_registrar_->MarkTextureFrameAvailable(id);
+//    texture_registrar_->MarkTextureFrameAvailable(id);
     // ---------------------------------------------
     result->Success(flutter::EncodableValue(id));
 
@@ -137,50 +135,55 @@ void FlutterWindowsANGLEOpenGLESPlugin::HandleMethodCall(
     // ---------------------------------------------
     surface_manager_->Draw([&]() {
 
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        program = CompileProgram(kVertexShader, kFragmentShader);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glUseProgram(program);
 
         GLfloat vertices[] = {
-            1.0f, -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f,
+//            1.0f, -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f
+            -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f
         };
         GLfloat textureVertices[] = {
-            1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f,
+//            0.0f, 0.0f,     // left top
+//            0.0f, 1.0f,     // left bottom
+//            1.0f, 0.0f,     // right top
+//            1.0f, 1.0f      // right bottom
+            1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f
         };
-
-        auto ph = glGetAttribLocation(program, "vPosition");
-        auto tch = glGetAttribLocation(program, "vTexCoord");
-        auto th = glGetUniformLocation(program, "sTexture");
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, (GLuint)textureId);
-        glUniform1i(th, 0);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        glVertexAttribPointer(ph, 2, GL_FLOAT, GL_FALSE, 4 * 2, vertices);
-        glVertexAttribPointer(tch, 2, GL_FLOAT, GL_FALSE, 4 * 2, textureVertices);
-
-        glEnableVertexAttribArray(ph);
-        glEnableVertexAttribArray(tch);
+        // texture
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)textureId);
+        glUniform1i(glGetUniformLocation(program, "sTexture"), 0);
 
         auto buf = static_cast<uint8_t*>(buffer.data());
         glTexImage2D(
             GL_TEXTURE_2D, 0, GL_RGBA,
-            1280, 720, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf
+            (GLuint)w, (GLuint)h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf
         );
 
-//        uint8_t image_data[4] = {255, 0, 0, 255};
-//        glTexImage2D(
-//            GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
+        // vertices
+        auto ph = glGetAttribLocation(program, "vPosition");
+        auto tch = glGetAttribLocation(program, "vTexCoord");
+
+        glEnableVertexAttribArray(ph);
+        glEnableVertexAttribArray(tch);
+
+        glVertexAttribPointer(ph, 2, GL_FLOAT, GL_FALSE, 4 * 2, vertices);
+        glVertexAttribPointer(tch, 2, GL_FLOAT, GL_FALSE, 4 * 2, textureVertices);
 
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        glDisableVertexAttribArray(0);
+
+        glDisableVertexAttribArray(ph);
+        glDisableVertexAttribArray(tch);
+
     });
     surface_manager_->Read();
     // ---------------------------------------------
